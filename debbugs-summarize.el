@@ -5,7 +5,7 @@
 ;; Author: dickmao
 ;; Version: 0.0.1
 ;; URL: https://github.com/dickmao/debbugs-summarize
-;; Package-Requires: ((vterm "0.0.4"))
+;; Package-Requires: ((debbugs "0.46.0.20251109.133812"))
 
 ;; This file is not part of GNU Emacs.
 

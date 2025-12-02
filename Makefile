@@ -4,7 +4,8 @@ ifeq ($(shell command -v uv 2>/dev/null),)
 $(error uv not found)
 endif
 INSTALLDIR ?= package-user-dir
-SRC := $(shell git ls-files gnus-summarize*.el)
+PYSRC := $(shell git ls-files *.py)
+ELSRC := $(shell git ls-files debbugs-summarize*.el)
 TESTSRC := $(shell git ls-files test*.el)
 
 .venv:
@@ -14,19 +15,19 @@ TESTSRC := $(shell git ls-files test*.el)
 install-py: .venv $(wildcard *.py)
 	uv pip install --quiet --force-reinstall --editable .
 
+deps/archives/gnu/archive-contents:
+	$(call install-recipe,$(CURDIR)/deps)
+	rm -rf deps/debbugs-summarize* # just keep deps
+
 .PHONY: compile
-compile:
-	$(EMACS) -batch -l debbugs \
+compile: deps/archives/gnu/archive-contents
+	$(EMACS) -batch \
 	  --eval "(setq byte-compile-error-on-warn t)" \
 	  --eval "(setq package-user-dir (expand-file-name \"deps\"))" \
 	  -f package-initialize \
 	  -L . \
 	  -f batch-byte-compile $(ELSRC) $(TESTSRC); \
 	  (ret=$$? ; rm -f $(ELSRC:.el=.elc) $(TESTSRC:.el=.elc) && exit $$ret)
-
-.PHONY: test
-test: compile
-	$(EMACS) --batch -L lisp -L test $(patsubst %.el,-l %,$(notdir $(TESTSRC))) -f ert-run-tests-batch
 
 .PHONY: test
 test: compile
@@ -50,7 +51,7 @@ dist: dist-clean
 	( \
 	set -e; \
 	PKG_NAME=`$(EMACS) -batch -L . -l debbugs-summarize-package --eval "(princ (debbugs-summarize-package-name))"`; \
-	rsync -R $(ELSRC) commit-prompt.txt $${PKG_NAME} && \
+	rsync -R $(ELSRC) $(PYSRC) pyproject.toml $${PKG_NAME} && \
 	tar cf $${PKG_NAME}.tar $${PKG_NAME}; \
 	)
 
@@ -73,15 +74,4 @@ endef
 
 .PHONY: install
 install:
-	( \
-	set -e; \
-	INSTALL_PATH=$(INSTALLDIR); \
-	if [[ "$${INSTALL_PATH}" == /* ]]; then INSTALL_PATH=\"$${INSTALL_PATH}\"; fi; \
-	1>/dev/null 2>/dev/null $(EMACS) --batch \
-	  --eval "(setq package-user-dir (expand-file-name $${INSTALL_PATH}))" \
-	  -f package-initialize -l project-claude \
-	  --eval "(or (version-list-<= '(0 0 1) \
-	   (package-desc-version (car (alist-get 'project-claude package-alist)))) \
-	   (error))" || $(MAKE) INSTALLDIR=$(INSTALLDIR) install-project-claude \
-	)
 	$(call install-recipe,$(INSTALLDIR))

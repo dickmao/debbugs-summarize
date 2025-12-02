@@ -25,7 +25,7 @@ To run `package-unpack', you need a -pkg.el."
 				   (debbugs-summarize-package-where))))
     (ignore-errors (delete-directory pkg-dir t))
     (make-directory pkg-dir t)
-    (dolist (el (split-string "debbugs-summarize.el debbugs-summarize-generated.el"))
+    (dolist (el (split-string "debbugs-summarize.el"))
       (copy-file (expand-file-name el (debbugs-summarize-package-where))
 		 (expand-file-name el pkg-dir)))
     (package--make-autoloads-and-stuff pkg-desc pkg-dir)))
