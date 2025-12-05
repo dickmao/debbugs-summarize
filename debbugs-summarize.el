@@ -90,8 +90,7 @@
         (substring body 0 match-pos)
       body)))
 
-(defun debsum--format-bug (bug-number status messages)
-  "Format bug STATUS and MESSAGES for LLM processing."
+(defun debsum--bug-header (bug-number status messages)
   (let* ((subject (alist-get 'subject status))
          (severity (alist-get 'severity status))
          (pending-status (alist-get 'pending status))
@@ -99,69 +98,69 @@
          (date (alist-get 'date status))
          (log-modified (alist-get 'log_modified status))
          (total-count (length messages)))
-    (with-temp-buffer
-      (insert (format "Bug #%d: %s\n" bug-number subject))
-      (insert (format "Status: %s\n" pending-status))
-      (insert (format "Severity: %s\n" severity))
-      (when package
-        (insert (format "Package: %s\n" package)))
-      (when date
-        (insert (format "Submitted: %s\n"
-                        (format-time-string "%Y-%m-%d" date))))
-      (when log-modified
-        (insert (format "Last Modified: %s\n"
-                        (format-time-string "%Y-%m-%d" log-modified))))
-      (insert "\n")
-      (insert (format "Discussion (%d message%s):\n\n"
-                      total-count
-                      (if (= total-count 1) "" "s")))
-      (dolist (msg messages)
-        (let* ((msg-num (alist-get 'msg_num msg))
-               (header (alist-get 'header msg))
-               (body (alist-get 'body msg))
-               (from nil) (date nil) (subj nil)
-               (msg-id nil) (in-reply-to nil) (references nil))
-          (with-temp-buffer
-            (insert header)
-            (goto-char (point-min))
-            (while (not (eobp))
-              (let ((line (buffer-substring-no-properties
-                           (line-beginning-position)
-                           (line-end-position))))
-                (cond
-                 ((string-match "^From:\\s-*\\(.*\\)$" line)
-                  (setq from (match-string 1 line)))
-                 ((string-match "^Date:\\s-*\\(.*\\)$" line)
-                  (setq date (match-string 1 line)))
-                 ((string-match "^Subject:\\s-*\\(.*\\)$" line)
-                  (setq subj (match-string 1 line)))
-                 ((string-match "^Message-[Ii][Dd]:\\s-*\\(.*\\)$" line)
-                  (setq msg-id (match-string 1 line)))
-                 ((string-match "^In-Reply-To:\\s-*\\(.*\\)$" line)
-                  (setq in-reply-to (match-string 1 line)))
-                 ((string-match "^References:\\s-*\\(.*\\)$" line)
-                  (setq references (match-string 1 line)))))
-              (forward-line 1)))
-          (insert (format "---\nMessage %d:\n" msg-num))
-          (when from
-            (insert (format "  From: %s\n" from)))
-          (when date
-            (insert (format "  Date: %s\n" date)))
-          (when subj
-            (insert (format "  Subject: %s\n" subj)))
-          (when msg-id
-            (insert (format "  Message-ID: %s\n" msg-id)))
-          (when in-reply-to
-            (insert (format "  In-Reply-To: %s\n" in-reply-to)))
-          (when references
-            (insert (format "  References: %s\n" references)))
-          (insert "\n")
-          (let ((cleaned-body (debsum--strip-base64-attachments
-                               (debsum--strip-emacsbug-template body))))
-            (dolist (line (split-string cleaned-body "\n"))
-              (insert "  " line "\n")))
-          (insert "\n")))
-      (buffer-string))))
+    (mapconcat
+     #'identity
+     (delq nil (list (format "Bug #%d: %s" bug-number subject)
+		     (format "Status: %s" pending-status)
+		     (format "Severity: %s" severity)
+		     (when package
+		       (format "Package: %s" package))
+		     (when date
+		       (format "Submitted: %s"
+			       (format-time-string "%Y-%m-%d" date)))
+		     (when log-modified
+		       (format "Last Modified: %s"
+			       (format-time-string "%Y-%m-%d" log-modified)))
+		     (format "Message Count: %d" total-count)
+		     ""))
+     "\n")))
+
+(defun debsum--bug-messages (messages)
+  (let (lines)
+    (dolist (msg messages)
+      (let* ((msg-num (alist-get 'msg_num msg))
+             (header (alist-get 'header msg))
+             (body (alist-get 'body msg))
+	     from date subj msg-id in-reply-to references)
+        (with-temp-buffer
+          (insert header)
+          (goto-char (point-min))
+          (while (not (eobp))
+            (let ((line (buffer-substring-no-properties
+                         (line-beginning-position)
+                         (line-end-position))))
+              (cond
+               ((string-match "^From:\\s-*\\(.*\\)$" line)
+                (setq from (match-string 1 line)))
+               ((string-match "^Date:\\s-*\\(.*\\)$" line)
+                (setq date (match-string 1 line)))
+               ((string-match "^Subject:\\s-*\\(.*\\)$" line)
+                (setq subj (match-string 1 line)))
+               ((string-match "^Message-[Ii][Dd]:\\s-*\\(.*\\)$" line)
+                (setq msg-id (match-string 1 line)))
+               ((string-match "^In-Reply-To:\\s-*\\(.*\\)$" line)
+                (setq in-reply-to (match-string 1 line)))
+               ((string-match "^References:\\s-*\\(.*\\)$" line)
+                (setq references (match-string 1 line)))))
+            (forward-line 1)))
+        (push (format "---\nMessage %d:" msg-num) lines)
+        (when from
+          (push (format "From: %s" from) lines))
+        (when date
+          (push (format "Date: %s" date) lines))
+        (when subj
+          (push (format "Subject: %s" subj) lines))
+        (when msg-id
+          (push (format "Message-ID: %s" msg-id) lines))
+        (when in-reply-to
+          (push (format "In-Reply-To: %s" in-reply-to) lines))
+        (when references
+          (push (format "References: %s" references) lines))
+	(push "" lines)
+        (push (debsum--strip-base64-attachments
+               (debsum--strip-emacsbug-template body)) lines)
+        (push "" lines)))
+    (mapconcat #'identity (nreverse lines) "\n")))
 
 ;;;###autoload
 (defun debsum-bug ()
@@ -173,15 +172,18 @@
 		(bug-num (when (string-match "bug#\\([0-9]+\\)" subject)
 			   (string-to-number (match-string 1 subject))))
 		(status (car (debbugs-get-status bug-num)))
-		(messages (cl-letf (((symbol-function 'soap-validate-xs-basic-type)
-				     #'ignore))
-			    (debbugs-get-bug-log bug-num)))
-		(bug-text (debsum--format-bug bug-num status messages)))
+		(bug-log (cl-letf (((symbol-function 'soap-validate-xs-basic-type)
+				    #'ignore))
+			   (debbugs-get-bug-log bug-num)))
+		(bug-header (debsum--bug-header bug-num status bug-log))
+		(bug-messages (debsum--bug-messages bug-log)))
       ;; (with-current-buffer "*scratch*"
       ;; 	(goto-char (point-max))
-      ;; 	(insert bug-text))
-
-      (debsum--get-summary-async bug-num bug-text))))
+      ;; 	(insert bug-header)
+      ;; 	(insert "\n")
+      ;; 	(insert bug-messages))
+      (debsum--get-summary-async bug-num bug-header bug-messages)
+      )))
 
 (defun debsum--elpa-dir ()
   (let ((elpa-dir (directory-file-name
@@ -192,7 +194,7 @@
         (directory-file-name (file-name-directory elpa-dir))
       elpa-dir)))
 
-(defun debsum--get-summary-async (bug-num bug-text)
+(defun debsum--get-summary-async (bug-num bug-header bug-messages)
   "Get summary via Python script, display in article buffer."
   (setq debsum--buffer-alist (assq-delete-all bug-num debsum--buffer-alist))
   (let* ((name (format "debbugs-summarize-Bug#%d" bug-num))
@@ -215,7 +217,7 @@
 							   "finished")))))
 	 initially (setq spin-stopper (spinner-start)
 			 timeout (run-with-timer 30 nil spin-stopper))
-	 initially (progn (process-send-string proc bug-text)
+	 initially (progn (process-send-string proc bug-messages)
 			  (process-send-eof proc))
 	 do (accept-process-output proc 0.1)
 	 until (or (not (memq timeout timer-list)) (not (process-live-p proc)))
@@ -225,23 +227,35 @@
       (cancel-timer timeout)
       (funcall spin-stopper)))
   (when-let ((buf (alist-get bug-num debsum--buffer-alist)))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+	(goto-char (point-min))
+	(insert bug-header)
+	(insert "\n")))
     (debsum--display-article buf)))
 
 (defun debsum--display-article (buffer)
   "Display BUFFER using Gnus article display routines."
   (debsum-assume-in-summary
-    (cl-letf (((symbol-function 'gnus-request-article-this-buffer)
-	       (lambda (_article _group)
-		 (erase-buffer)
-		 (insert-buffer-substring buffer)
-		 (debsum--make-citations-clickable)
-		 (goto-char (point-max))
-		 (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
-		 (goto-char (point-min))
-		 (local-set-key (kbd "C-'") #'debsum-open-chat)
-		 (setq gnus-article-current-summary gnus-summary-buffer)
-                 'article)))
-      (gnus-article-prepare 0 nil))))
+    (setq-default gnus-newsgroup-name gnus-newsgroup-name)
+    ;; No... must use override-method as 0 gets added to newsgroup-reads
+    (with-current-buffer (get-buffer-create gnus-original-article-buffer)
+      (let ((inhibit-read-only t))
+	(erase-buffer)
+	(insert-buffer-substring buffer)
+	(setq-local gnus-original-group-and-article (cons gnus-newsgroup-name 0))))
+    (let ((gnus-article-prepare-hook
+	   (list (lambda ()
+		   (with-current-buffer gnus-article-buffer
+		     (let ((inhibit-read-only t))
+		       ;(debsum--make-citations-clickable)
+		       (goto-char (point-max))
+		       (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
+		       (goto-char (point-min))
+		       (local-set-key (kbd "C-'") #'debsum-open-chat)))))))
+      (gnus-article-prepare 0 nil))
+    (let (kill-buffer-query-functions)
+      (kill-buffer gnus-original-article-buffer))))
 
 (defun debsum-open-chat ()
   "Open comint buffer for LLM chat."
