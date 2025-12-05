@@ -23,6 +23,7 @@
 ;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
 (require 'debbugs)
+(require 'debbugs-summarize-gnus-backend)
 (require 'gnus-sum)
 (require 'gnus-art)
 (require 'spinner)
@@ -237,25 +238,19 @@
 (defun debsum--display-article (buffer)
   "Display BUFFER using Gnus article display routines."
   (debsum-assume-in-summary
-    (setq-default gnus-newsgroup-name gnus-newsgroup-name)
-    ;; No... must use override-method as 0 gets added to newsgroup-reads
-    (with-current-buffer (get-buffer-create gnus-original-article-buffer)
-      (let ((inhibit-read-only t))
-	(erase-buffer)
-	(insert-buffer-substring buffer)
-	(setq-local gnus-original-group-and-article (cons gnus-newsgroup-name 0))))
-    (let ((gnus-article-prepare-hook
+    (let ((gnus-override-method '(nndebsum ""))
+	  (gnus-article-prepare-hook
 	   (list (lambda ()
 		   (with-current-buffer gnus-article-buffer
 		     (let ((inhibit-read-only t))
-		       ;(debsum--make-citations-clickable)
+		       (erase-buffer)
+		       (insert-buffer-substring buffer)
+		       (debsum--make-citations-clickable)
 		       (goto-char (point-max))
 		       (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
 		       (goto-char (point-min))
 		       (local-set-key (kbd "C-'") #'debsum-open-chat)))))))
-      (gnus-article-prepare 0 nil))
-    (let (kill-buffer-query-functions)
-      (kill-buffer gnus-original-article-buffer))))
+      (gnus-article-prepare "foo" nil))))
 
 (defun debsum-open-chat ()
   "Open comint buffer for LLM chat."
