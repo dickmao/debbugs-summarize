@@ -22,8 +22,11 @@
 (defun nndebsum-status-message (&optional _server)
   "")
 
-(defun nndebsum-request-article (_article &optional _group _server _to-buffer)
-  t)
+(defun nndebsum-request-head (_id &optional _group _server)
+  nil)
+
+(defun nndebsum-request-article (_article &optional group _server _to-buffer)
+  (cons (or group gnus-newsgroup-name) "foo"))
 
 (defun nndebsum-request-group (_group &optional _server _fast _info)
   (let (deactivate-mark)
@@ -43,6 +46,6 @@
 (defun nndebsum-request-post (&optional _server)
   nil)
 
-(provide 'debbugs-summarize-gnus-backend)
+(provide 'nndebsum)
 
 ;;; nndebsum.el ends here

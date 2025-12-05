@@ -5,8 +5,18 @@ $(error uv not found)
 endif
 INSTALLDIR ?= package-user-dir
 PYSRC := $(shell git ls-files *.py)
-ELSRC := $(shell git ls-files debbugs-summarize*.el)
+ELSRC := $(shell git ls-files debbugs-summarize*.el nn*.el)
 TESTSRC := $(shell git ls-files test*.el)
+
+.PHONY: compile
+compile: deps/archives/gnu/archive-contents
+	$(EMACS) -batch \
+	  --eval "(setq byte-compile-error-on-warn t)" \
+	  --eval "(setq package-user-dir (expand-file-name \"deps\"))" \
+	  -f package-initialize \
+	  -L . \
+	  -f batch-byte-compile $(ELSRC) $(TESTSRC); \
+	  (ret=$$? ; rm -f $(ELSRC:.el=.elc) $(TESTSRC:.el=.elc) && exit $$ret)
 
 uv.lock:
 	uv sync -q
@@ -18,16 +28,6 @@ install-py: .venv $(wildcard *.py)
 deps/archives/gnu/archive-contents: debbugs-summarize.el
 	$(call install-recipe,$(CURDIR)/deps)
 	rm -rf deps/debbugs-summarize* # just keep deps
-
-.PHONY: compile
-compile: deps/archives/gnu/archive-contents
-	$(EMACS) -batch \
-	  --eval "(setq byte-compile-error-on-warn t)" \
-	  --eval "(setq package-user-dir (expand-file-name \"deps\"))" \
-	  -f package-initialize \
-	  -L . \
-	  -f batch-byte-compile $(ELSRC) $(TESTSRC); \
-	  (ret=$$? ; rm -f $(ELSRC:.el=.elc) $(TESTSRC:.el=.elc) && exit $$ret)
 
 .PHONY: test
 test: compile

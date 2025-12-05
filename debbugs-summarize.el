@@ -5,7 +5,7 @@
 ;; Author: dickmao
 ;; Version: 0.0.1
 ;; URL: https://github.com/dickmao/debbugs-summarize
-;; Package-Requires: ((debbugs "0.46") (spinner "1.7.3"))
+;; Package-Requires: ((debbugs "0.46"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -23,15 +23,15 @@
 ;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
 (require 'debbugs)
-(require 'debbugs-summarize-gnus-backend)
+(require 'nndebsum)
 (require 'gnus-sum)
 (require 'gnus-art)
-(require 'spinner)
 (require 'auth-source)
 (require 'soap-client)
 
-;; gnus reflects this into gnus-article-mode-map
-(define-key gnus-summary-mode-map (kbd "z") #'debsum-bug)
+(define-key gnus-summary-mode-map (kbd "z") #'debsum-bug-from-summary)
+;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
+(define-key gnus-article-mode-map (kbd "z") #'debsum-bug-from-summary)
 
 (defgroup debbugs-summarize nil
   "Summarize shit."
@@ -66,15 +66,6 @@
          'follow-link t
          'help-echo (format "Jump to article %d" article-num))))))
 
-(defmacro debsum-assume-in-summary (&rest body)
-  "If we are not in an summary buffer, go there, and execute BODY.  Restore."
-  (declare (indent 0) (debug t))
-  `(save-current-buffer
-     (when (or (derived-mode-p 'gnus-summary-mode)
-               (when (gnus-buffer-live-p gnus-summary-buffer)
-                 (set-buffer gnus-summary-buffer)))
-       ,@body)))
-
 (defun debsum--strip-base64-attachments (body)
   "Remove base64 attachments from BODY."
   (replace-regexp-in-string
@@ -91,7 +82,7 @@
         (substring body 0 match-pos)
       body)))
 
-(defun debsum--bug-header (bug-number status messages)
+(defun debsum--bug-header (bug-num status messages)
   (let* ((subject (alist-get 'subject status))
          (severity (alist-get 'severity status))
          (pending-status (alist-get 'pending status))
@@ -101,7 +92,7 @@
          (total-count (length messages)))
     (mapconcat
      #'identity
-     (delq nil (list (format "Bug #%d: %s" bug-number subject)
+     (delq nil (list (format "Bug #%d: %s" bug-num subject)
 		     (format "Status: %s" pending-status)
 		     (format "Severity: %s" severity)
 		     (when package
@@ -163,28 +154,27 @@
         (push "" lines)))
     (mapconcat #'identity (nreverse lines) "\n")))
 
-;;;###autoload
-(defun debsum-bug ()
+(defun debsum-bug-from-summary ()
   "Summarize Bug#XXXX and display in article buffer."
   (interactive)
+  (if-let ((subject (gnus-summary-article-subject)))
+      (when (string-match "bug#\\([0-9]+\\)" subject)
+	(debsum-bug (string-to-number (match-string 1 subject))))
+    (user-error "Nothing happens here")))
+
+;;;###autoload
+(defun debsum-bug (bug-num)
+  "Summarize Bug#XXXX and display in article buffer."
+  (interactive (list (read-number "Enter bug number: ")))
   (cl-assert (setenv "GEMINI_API_KEY" (debsum--get-api-key)))
-  (debsum-assume-in-summary
-    (when-let* ((subject (gnus-summary-article-subject))
-		(bug-num (when (string-match "bug#\\([0-9]+\\)" subject)
-			   (string-to-number (match-string 1 subject))))
-		(status (car (debbugs-get-status bug-num)))
-		(bug-log (cl-letf (((symbol-function 'soap-validate-xs-basic-type)
-				    #'ignore))
-			   (debbugs-get-bug-log bug-num)))
-		(bug-header (debsum--bug-header bug-num status bug-log))
-		(bug-messages (debsum--bug-messages bug-log)))
-      ;; (with-current-buffer "*scratch*"
-      ;; 	(goto-char (point-max))
-      ;; 	(insert bug-header)
-      ;; 	(insert "\n")
-      ;; 	(insert bug-messages))
-      (debsum--get-summary-async bug-num bug-header bug-messages)
-      )))
+  (setq debsum--buffer-alist
+	(cl-remove-if-not (lambda (pair)
+			    (and (bufferp (cdr pair))
+				 (buffer-live-p (cdr pair))))
+			  debsum--buffer-alist))
+  (when-let ((buf (or (alist-get bug-num debsum--buffer-alist)
+		      (debsum--get-summary bug-num))))
+    (debsum--display-article buf)))
 
 (defun debsum--elpa-dir ()
   (let ((elpa-dir (directory-file-name
@@ -195,49 +185,68 @@
         (directory-file-name (file-name-directory elpa-dir))
       elpa-dir)))
 
-(defun debsum--get-summary-async (bug-num bug-header bug-messages)
-  "Get summary via Python script, display in article buffer."
+(defun debsum--get-summary (bug-num)
+  "Return process buffer."
   (setq debsum--buffer-alist (assq-delete-all bug-num debsum--buffer-alist))
   (let* ((name (format "debbugs-summarize-Bug#%d" bug-num))
 	 (bname (format "*%s*" name))
-	 timeout spin-stopper)
+	 (status (car (debbugs-get-status bug-num)))
+	 (log (cl-letf (((symbol-function 'soap-validate-xs-basic-type)
+			 #'ignore))
+		(debbugs-get-bug-log bug-num)))
+	 (header (debsum--bug-header bug-num status log))
+	 (messages (debsum--bug-messages log)))
+    ;; (with-current-buffer "*scratch*"
+    ;; 	(goto-char (point-max))
+    ;; 	(insert header)
+    ;; 	(insert "\n")
+    ;; 	(insert messages))
     (when (buffer-live-p (get-buffer bname))
       (let (kill-buffer-query-functions)
 	(kill-buffer bname)))
-    (unwind-protect
-	(cl-loop
-	 with success-p = nil
-	 with default-directory = (debsum--elpa-dir)
-	 with proc = (make-process
-		      :name name
-		      :buffer bname
-		      :command (split-string "uv run python summarize.py")
-		      :sentinel (lambda (_proc event)
-				  (unless success-p
-				    (setq success-p (equal (string-trim event)
-							   "finished")))))
-	 initially (setq spin-stopper (spinner-start)
-			 timeout (run-with-timer 30 nil spin-stopper))
-	 initially (progn (process-send-string proc bug-messages)
-			  (process-send-eof proc))
-	 do (accept-process-output proc 0.1)
-	 until (or (not (memq timeout timer-list)) (not (process-live-p proc)))
-	 finally do (when success-p
-		      (setf (alist-get bug-num debsum--buffer-alist)
-			    (process-buffer proc))))
-      (cancel-timer timeout)
-      (funcall spin-stopper)))
-  (when-let ((buf (alist-get bug-num debsum--buffer-alist)))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-	(goto-char (point-min))
-	(insert bug-header)
-	(insert "\n")))
-    (debsum--display-article buf)))
+    (cl-loop
+     with success-p = nil
+     with default-directory = (debsum--elpa-dir)
+     with proc = (make-process
+		  :name name
+		  :buffer bname
+		  :command (split-string "uv run python summarize.py")
+		  :sentinel (lambda (_proc event)
+			      (unless success-p
+				(setq success-p (equal (string-trim event)
+						       "finished")))))
+     initially (progn (process-send-string proc messages)
+		      (process-send-eof proc))
+     repeat 225
+     do (accept-process-output proc 0.2)
+     until (not (process-live-p proc))
+     finally do (progn
+		  (when success-p
+		    (setf (alist-get bug-num debsum--buffer-alist)
+			  (process-buffer proc)))
+		  (when (process-live-p proc)
+		    (kill-process proc))))
+    (if-let ((ret (alist-get bug-num debsum--buffer-alist)))
+	(prog1 ret
+	  (with-current-buffer ret
+	    (special-mode)
+	    (let ((inhibit-read-only t))
+	      (fill-region (point-min) (point-max))
+	      (goto-char (point-min))
+	      (insert header)
+	      (insert "\n")
+	      (debsum--make-citations-clickable)
+	      (goto-char (point-max))
+	      (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
+	      (goto-char (point-min))
+	      (local-set-key (kbd "C-'") #'debsum-open-chat))))
+      (message "Bummer")
+      (prog1 nil (pop-to-buffer bname)))))
 
 (defun debsum--display-article (buffer)
   "Display BUFFER using Gnus article display routines."
-  (debsum-assume-in-summary
+  (if (not (derived-mode-p 'gnus-summary-mode))
+      (pop-to-buffer buffer)
     (let ((gnus-override-method '(nndebsum ""))
 	  (gnus-article-prepare-hook
 	   (list (lambda ()
@@ -245,25 +254,26 @@
 		     (let ((inhibit-read-only t))
 		       (erase-buffer)
 		       (insert-buffer-substring buffer)
-		       (debsum--make-citations-clickable)
-		       (goto-char (point-max))
-		       (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
-		       (goto-char (point-min))
-		       (local-set-key (kbd "C-'") #'debsum-open-chat)))))))
-      (gnus-article-prepare "foo" nil))))
+		       (local-set-key (kbd "C-'") #'debsum-open-chat)
+		       (goto-char (point-min))))))))
+      (gnus-article-prepare "foo" nil)
+      (setq gnus-current-article nil))))
 
 (defun debsum-open-chat ()
   "Open comint buffer for LLM chat."
   (interactive)
   ;; make-comint is idempotent
-  (let ((buf (apply #'make-comint "debsum-chat" "uv" nil
-		    (split-string "run python chat.py"))))
+  (let* ((default-directory (debsum--elpa-dir))
+	 (buf (apply #'make-comint "debsum-chat" "uv" nil
+		     (split-string "run python chat.py"))))
     (with-current-buffer buf
       (debsum-chat-mode)
       (goto-char (point-max))
       (comint-send-input))
+    (when (> (length (window-list)) 1)
+      (delete-other-windows))
     (pop-to-buffer buf '((display-buffer-at-bottom)
-			 (window-height . 0.3)))))
+			 (window-height . 0.5)))))
 
 (define-derived-mode debsum-chat-mode comint-mode "Debsum-Chat"
   "Comint mode for LLM chat."

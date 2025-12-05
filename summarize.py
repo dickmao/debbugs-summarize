@@ -14,6 +14,6 @@ model = genai.GenerativeModel('gemini-2.0-flash')
 
 script_dir = Path(__file__).parent
 prompt = (script_dir / 'summarize-prompt.txt').read_text()
-full_text = sys.stdin.read()
+full_text = sys.stdin.buffer.read().decode('utf-8', errors='replace')
 response = model.generate_content(prompt + '\n\n' + full_text)
 print(response.text)
