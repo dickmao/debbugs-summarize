@@ -39,6 +39,7 @@
   :prefix "debbugs-summarize-")
 
 (defvar debsum--buffer-alist nil "Alist (BUGNUM . BUFFER)")
+(defvar debsum--messages-alist nil "Alist (BUGNUM . CORPUS)")
 
 (defun debsum--get-api-key ()
   "Get Gemini API key from auth-source."
@@ -172,9 +173,9 @@
 			    (and (bufferp (cdr pair))
 				 (buffer-live-p (cdr pair))))
 			  debsum--buffer-alist))
-  (when-let ((buf (or (alist-get bug-num debsum--buffer-alist)
-		      (debsum--get-summary bug-num))))
-    (debsum--display-article buf)))
+  (when-let ((pair (or (assq bug-num debsum--buffer-alist)
+		       (debsum--reget-summary bug-num))))
+    (debsum--display-article (car pair) (cdr pair))))
 
 (defun debsum--elpa-dir ()
   (let ((elpa-dir (directory-file-name
@@ -185,7 +186,13 @@
         (directory-file-name (file-name-directory elpa-dir))
       elpa-dir)))
 
-(defun debsum--get-summary (bug-num)
+(defsubst debsum--chat-keyable (bug-num)
+  (local-set-key (kbd "C-c '")
+		 (lambda ()
+		   (interactive)
+		   (debsum-open-chat bug-num))))
+
+(defun debsum--reget-summary (bug-num)
   "Return process buffer."
   (setq debsum--buffer-alist (assq-delete-all bug-num debsum--buffer-alist))
   (let* ((name (format "debbugs-summarize-Bug#%d" bug-num))
@@ -195,7 +202,9 @@
 			 #'ignore))
 		(debbugs-get-bug-log bug-num)))
 	 (header (debsum--bug-header bug-num status log))
-	 (messages (debsum--bug-messages log)))
+	 (messages (or (alist-get bug-num debsum--messages-alist)
+		       (setf (alist-get bug-num debsum--messages-alist)
+			     (debsum--bug-messages log)))))
     ;; (with-current-buffer "*scratch*"
     ;; 	(goto-char (point-max))
     ;; 	(insert header)
@@ -226,9 +235,9 @@
 			  (process-buffer proc)))
 		  (when (process-live-p proc)
 		    (kill-process proc))))
-    (if-let ((ret (alist-get bug-num debsum--buffer-alist)))
+    (if-let ((ret (assq bug-num debsum--buffer-alist)))
 	(prog1 ret
-	  (with-current-buffer ret
+	  (with-current-buffer (cdr ret)
 	    (special-mode)
 	    (let ((inhibit-read-only t))
 	      (fill-region (point-min) (point-max))
@@ -237,13 +246,13 @@
 	      (insert "\n")
 	      (debsum--make-citations-clickable)
 	      (goto-char (point-max))
-	      (insert "\n\n---\nPress C-' to ask follow-up questions.\n")
+	      (insert "\n\n---\nPress C-c ' to ask follow-up questions.\n")
 	      (goto-char (point-min))
-	      (local-set-key (kbd "C-'") #'debsum-open-chat))))
+	      (debsum--chat-keyable bug-num))))
       (message "Bummer")
       (prog1 nil (pop-to-buffer bname)))))
 
-(defun debsum--display-article (buffer)
+(defun debsum--display-article (bug-num buffer)
   "Display BUFFER using Gnus article display routines."
   (if (not (derived-mode-p 'gnus-summary-mode))
       (pop-to-buffer buffer)
@@ -254,22 +263,37 @@
 		     (let ((inhibit-read-only t))
 		       (erase-buffer)
 		       (insert-buffer-substring buffer)
-		       (local-set-key (kbd "C-'") #'debsum-open-chat)
+		       (debsum--chat-keyable bug-num)
 		       (goto-char (point-min))))))))
       (gnus-article-prepare "foo" nil)
       (setq gnus-current-article nil))))
 
-(defun debsum-open-chat ()
+(defun debsum-open-chat (bug-num)
   "Open comint buffer for LLM chat."
-  (interactive)
-  ;; make-comint is idempotent
   (let* ((default-directory (debsum--elpa-dir))
+	 (messages (or (alist-get bug-num debsum--messages-alist)
+		       (error "Missing messages for Bug#%d" bug-num)))
+	 ;; make-comint is idempotent
 	 (buf (apply #'make-comint "debsum-chat" "uv" nil
-		     (split-string "run python chat.py"))))
+		     (split-string "run python chat.py")))
+	 (proc (get-buffer-process buf)))
     (with-current-buffer buf
       (debsum-chat-mode)
-      (goto-char (point-max))
-      (comint-send-input))
+      (while (not (save-excursion
+                    (goto-char (point-min))
+                    (re-search-forward comint-prompt-regexp nil t)))
+	(accept-process-output proc 0.1))
+      (goto-char (process-mark proc))
+      ;; insert-file-contents doesn't move point, ergo contortion.
+      (insert (with-temp-buffer
+		(insert-file-contents (expand-file-name "chat-prompt.txt"))
+		(insert "\r")
+		(insert messages)
+		(goto-char (point-min))
+		(while (search-forward "\n" nil t)
+		  (replace-match "\\\\r\\\\n" t t))
+		(buffer-string)))
+      )
     (when (> (length (window-list)) 1)
       (delete-other-windows))
     (pop-to-buffer buf '((display-buffer-at-bottom)

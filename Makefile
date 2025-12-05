@@ -51,7 +51,7 @@ dist: dist-clean
 	( \
 	set -e; \
 	PKG_NAME=`$(EMACS) -batch -L . -l debbugs-summarize-package --eval "(princ (debbugs-summarize-package-name))"`; \
-	rsync -R $(ELSRC) $(PYSRC) Makefile pyproject.toml summarize-prompt.txt $${PKG_NAME} && \
+	rsync -R $(ELSRC) $(PYSRC) Makefile pyproject.toml summarize-prompt.txt chat-prompt.txt $${PKG_NAME} && \
 	tar cf $${PKG_NAME}.tar $${PKG_NAME}; \
 	)
 

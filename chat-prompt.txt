@@ -1,0 +1,3 @@
+I have questions regarding the following email thread.  Note a ">"
+marker precedes a citation of the message being responded to.  Such
+markers nest so that ">>" refers to a grandparent in the message tree.

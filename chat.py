@@ -12,6 +12,12 @@ genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-2.0-flash')
 chat = model.start_chat(history=[])
 
+try:
+    response = chat.send_message(user_input)
+    print(response.text)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+
 print("Gemini> ", end='', flush=True)
 
 for line in sys.stdin:
