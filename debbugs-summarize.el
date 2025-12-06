@@ -158,9 +158,9 @@
 (defun debsum-bug-from-summary ()
   "Summarize Bug#XXXX and display in article buffer."
   (interactive)
-  (if-let ((subject (gnus-summary-article-subject)))
-      (when (string-match "bug#\\([0-9]+\\)" subject)
-	(debsum-bug (string-to-number (match-string 1 subject))))
+  (if-let ((subject (gnus-summary-article-subject))
+	   (bug-p (string-match "bug#\\([0-9]+\\)" subject)))
+      (debsum-bug (string-to-number (match-string 1 subject)))
     (user-error "Nothing happens here")))
 
 ;;;###autoload
