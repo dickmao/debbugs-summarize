@@ -187,6 +187,7 @@
         (push "" lines)))
     (mapconcat #'identity (nreverse lines) "\n")))
 
+;;;###autoload
 (defun debsum-bug-from-summary ()
   "Summarize Bug#XXXX and display in article buffer."
   (interactive)
