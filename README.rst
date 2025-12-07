@@ -17,6 +17,7 @@ Install
 ::
 
    Add your Google gemini-api password to ~/.authinfo.  Then,
+
    git clone https://github.com/dickmao/debbugs-summarize.git
    make -C debbugs-summarize install
 
