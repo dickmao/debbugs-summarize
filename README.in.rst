@@ -18,8 +18,12 @@
 
 Install
 =======
-Add your Google gemini-api password to ~/.authinfo.  Then,
+Add a line like
+::
 
+   machine generativelanguage.googleapis.com login gemini-api password your_secret
+
+to your ~/.authinfo.  Then,
 ::
 
    git clone https://github.com/dickmao/debbugs-summarize.git
