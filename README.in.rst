@@ -2,7 +2,7 @@
 
 ::
 
-   Excerpt: lists.gnu.org/archive/html/emacs-devel/2021-08/msg01246.html
+   Excerpt lists.gnu.org/archive/html/emacs-devel/2021-08/msg01246.html
 
    dickmao: When you've been programming as long as I have, you realize
    more than ninety percent of the discussion that takes place before a
@@ -12,11 +12,11 @@
    _is_ relevant without having the other 90%?  If so, please describe
    that way, and we will see if we can follow it.
 
-
 Install
 =======
 ::
 
+   Add your Google gemini-api password to ~/.authinfo.  Then,
    git clone https://github.com/dickmao/debbugs-summarize.git
    make -C debbugs-summarize install
 
