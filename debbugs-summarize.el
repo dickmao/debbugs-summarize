@@ -220,10 +220,12 @@
       elpa-dir)))
 
 (defsubst debsum--chat-keyable (bug-num)
-  (local-set-key (kbd "C-c '")
-		 (lambda ()
-		   (interactive)
-		   (debsum-open-chat bug-num))))
+  (let ((map (copy-keymap (current-local-map))))
+    (define-key map (kbd "C-c '")
+		(lambda ()
+		  (interactive)
+		  (debsum-open-chat bug-num)))
+    (use-local-map map)))
 
 (defun debsum--reget-summary (bug-num)
   "Return process buffer."

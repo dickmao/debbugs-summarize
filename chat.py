@@ -10,7 +10,8 @@ if not api_key:
     sys.exit(1)
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-2.0-flash')
+model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+model = genai.GenerativeModel(model_name)
 chat = model.start_chat(history=[])
 
 if len(sys.argv) > 1:
