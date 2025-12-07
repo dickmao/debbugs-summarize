@@ -20,21 +20,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [macos-latest,ubuntu-latest]
+        emacs_version: [29.2, 30.2]
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: apt-get
-      if: startsWith(runner.os, 'Linux')
-      run: |
-        sudo apt-get -yq update
-        DEBIAN_FRONTEND=noninteractive sudo apt-get -yq install libxml2-dev libgccjit-11-dev emacs
+    - uses: purcell/setup-emacs@master
+      with:
+        version: ${{ matrix.emacs_version }}
 
-    - name: brew-haha
-      if: startsWith(runner.os, 'macOS')
+    - name: paths
       run: |
-        brew install emacs libgccjit libxml2
+        echo "$HOME/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        echo "LD_LIBRARY_PATH=$HOME/.local/lib" >> $GITHUB_ENV
 
     - name: test
       run: |

@@ -1,14 +1,5 @@
 |build-status|
 
-Install
-=======
-::
-
-   git clone https://github.com/dickmao/debbugs-summarize.git
-   make -C debbugs-summarize install
-
-Usage
-=====
 ::
 
    Excerpt: lists.gnu.org/archive/html/emacs-devel/2021-08/msg01246.html
@@ -20,6 +11,18 @@ Usage
    2021 GNU Emacs maintainer: Do you have a way to recover the 10% that
    _is_ relevant without having the other 90%?  If so, please describe
    that way, and we will see if we can follow it.
+
+
+Install
+=======
+::
+
+   git clone https://github.com/dickmao/debbugs-summarize.git
+   make -C debbugs-summarize install
+
+Usage
+=====
+::
 
 .. COMMENTARY (see Makefile)
 
