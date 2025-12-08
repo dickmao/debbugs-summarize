@@ -10,7 +10,7 @@ if not api_key:
     sys.exit(1)
 
 genai.configure(api_key=api_key)
-model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+model_name = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
 model = genai.GenerativeModel(model_name)
 
 script_dir = Path(__file__).parent
