@@ -10,8 +10,12 @@ TESTSRC := $(shell git ls-files test*.el)
 
 .PHONY: compile
 compile: deps/archives/gnu/archive-contents
-	$(EMACS) -batch \
+	$(EMACS) -batch -l gnus \
 	  --eval "(setq byte-compile-error-on-warn t)" \
+	  --eval "(put 'gnus-select-method 'byte-obsolete-variable nil)" \
+	  --eval "(put 'when-let 'byte-obsolete-info nil)" \
+	  --eval "(put 'if-let 'byte-obsolete-info nil)" \
+	  --eval "(put 'gnus-secondary-select-methods 'byte-obsolete-variable nil)" \
 	  --eval "(setq package-user-dir (expand-file-name \"deps\"))" \
 	  -f package-initialize \
 	  -L . \

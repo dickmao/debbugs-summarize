@@ -35,6 +35,12 @@
 (require 'auth-source)
 (require 'soap-client)
 
+;;;###autoload
+(with-eval-after-load 'gnus-art
+  (define-key gnus-summary-mode-map (kbd "z") #'debsum-thread)
+  ;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
+  (define-key gnus-article-mode-map (kbd "z") #'debsum-thread))
+
 (defgroup debbugs-summarize nil
   "Summarize shit."
   :group 'tools
@@ -374,7 +380,7 @@
 ;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
 (define-key gnus-article-mode-map (kbd "z") #'debsum-thread)
 
-(provide 'debsum)
+(provide 'debbugs-summarize)
 
 ;; Local Variables:
 ;; read-symbol-shorthands: (("debsum-" . "debbugs-summarize-"))
