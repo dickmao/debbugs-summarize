@@ -141,11 +141,10 @@
 		     ""))
      "\n")))
 
-(defun gnus-summarize--thread-full-text (message-id)
+(defun gnus-summarize--thread-full-text (root-id)
   (when (or (derived-mode-p 'gnus-summary-mode)
 	    (derived-mode-p 'gnus-article-mode))
-    (gnus-summary-refer-thread)
-    (when-let ((thread (gnus-id-to-thread (gnus-root-id message-id)))
+    (when-let ((thread (gnus-id-to-thread root-id))
 	       (article-nums (gnus-articles-in-thread thread)))
       (save-excursion
 	(save-window-excursion
@@ -291,17 +290,19 @@
 
 (defun gnus-summarize--thread (message-id)
   (gnus-summarize--init)
-  (when-let ((reget-p (not (assoc-default message-id gnus-summarize--buffer-alist)))
-	     (name (format "gnus-summarize-%s" message-id))
-	     (bname (format "*%s*" name))
-	     (full-text (or (assoc-default message-id gnus-summarize--full-text-alist)
-			    (let ((ret (gnus-summarize--thread-full-text message-id)))
-			      (prog1 ret
-				(push (cons (gnus-root-id message-id) ret)
-				      gnus-summarize--full-text-alist)))))
-	     (buf (gnus-summarize--reget-summary name bname full-text)))
-    (gnus-summarize--add-buf message-id buf nil))
-  (assoc-default message-id gnus-summarize--buffer-alist))
+  (gnus-summary-refer-thread)
+  (let ((root-id (gnus-root-id message-id)))
+    (when-let ((reget-p (not (assoc-default message-id gnus-summarize--buffer-alist)))
+	       (name (format "gnus-summarize-%s" root-id))
+	       (bname (format "*%s*" name))
+	       (full-text (or (assoc-default root-id gnus-summarize--full-text-alist)
+			      (let ((ret (gnus-summarize--thread-full-text root-id)))
+				(prog1 ret
+				  (push (cons root-id ret)
+					gnus-summarize--full-text-alist)))))
+	       (buf (gnus-summarize--reget-summary name bname full-text)))
+      (gnus-summarize--add-buf root-id buf nil))
+    (assoc-default root-id gnus-summarize--buffer-alist)))
 
 (defun gnus-summarize--elpa-dir ()
   (let ((elpa-dir (directory-file-name
