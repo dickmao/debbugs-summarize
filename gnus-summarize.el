@@ -224,19 +224,22 @@
 ;;;###autoload
 (defun gnus-summarize-thread ()
   "Main entry point."
-  (interactive)
-  (if-let ((subj (gnus-summary-article-subject))
-	   (bug-p (string-match "bug#\\([0-9]+\\)" subj))
-	   (bug-num (string-to-number (match-string 1 subj))))
-      (gnus-summarize-bug bug-num)
-    (if-let ((header (gnus-summary-article-header))
-	     (message-id (mail-header-id header))
-	     (root-id (progn (gnus-summary-refer-thread)
-			     (gnus-root-id message-id))))
-	(progn
-	  (gnus-summarize--thread root-id)
-	  (gnus-summarize--display-article root-id nil))
-      (message "Nothing happens here"))))
+  (interactive nil gnus-summary-mode)
+  (let ((restore (gnus-summary-article-number)))
+    (if-let ((subj (gnus-summary-article-subject))
+	     (bug-p (string-match "bug#\\([0-9]+\\)" subj))
+	     (bug-num (string-to-number (match-string 1 subj))))
+	(gnus-summarize-bug bug-num)
+      (if-let ((header (gnus-summary-article-header))
+	       (message-id (mail-header-id header))
+	       (root-id (progn (gnus-summary-refer-thread)
+			       (gnus-root-id message-id))))
+	  (progn
+	    (gnus-summarize--thread root-id)
+	    (gnus-summarize--display-article root-id nil))
+	(message "Nothing happens here")))
+    ;; gnus-summary-display-article wasn't called so compensate
+    (gnus-summary-goto-subject restore)))
 
 (defun gnus-summarize--bug (bug-num)
   (gnus-summarize--init)
@@ -378,7 +381,12 @@
 		 240 nil (lambda ()
 			   (when (buffer-live-p b)
 			     (let (kill-buffer-query-functions)
-			       (kill-buffer b))))))))
+			       (kill-buffer b)))))))
+  (add-hook 'kill-buffer-hook
+	    (lambda ()
+	      (when (bound-and-true-p gnus-summarize--kill-timer)
+		(cancel-timer gnus-summarize--kill-timer)))
+	    nil t))
 
 ;;;###autoload
 (with-eval-after-load 'gnus-art
