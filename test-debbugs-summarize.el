@@ -59,12 +59,12 @@
         (gnus-use-dribble-file nil)
         (network-security-level (quote low))
         (gnus-interactive-exit (quote quiet))
-	,@(when (boundp 'gnus-select-method)
-	    (list `(gnus-select-method '(nnnil ""))))
         ,@(when select-methods
 	    (if (boundp 'gnus-select-methods)
 		(list `(gnus-select-methods ,select-methods))
-	      (list `(gnus-secondary-select-methods ,select-methods))))
+	      (list
+	       `(gnus-select-method '(nnnil ""))
+	       `(gnus-secondary-select-methods ,select-methods))))
         (message-directory (expand-file-name "Mail"))
         (mail-source-directory (expand-file-name "Mail"))
         (mail-source-crash-box (expand-file-name ".whatev"))

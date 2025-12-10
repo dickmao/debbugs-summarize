@@ -35,12 +35,6 @@
 (require 'auth-source)
 (require 'soap-client)
 
-;;;###autoload
-(with-eval-after-load 'gnus-art
-  (define-key gnus-summary-mode-map (kbd "z") #'debsum-thread)
-  ;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
-  (define-key gnus-article-mode-map (kbd "z") #'debsum-thread))
-
 (defgroup debbugs-summarize nil
   "Summarize shit."
   :group 'tools
@@ -148,20 +142,40 @@
      "\n")))
 
 (defun debsum--thread-full-text (message-id)
-  (mapconcat
-   #'identity
-   (when-let ((thread (gnus-id-to-thread (gnus-root-id message-id)))
-              (article-nums (gnus-articles-in-thread thread)))
-     (let (bodies)
-       (dolist (num article-nums)
-         (save-window-excursion
-           (gnus-summary-display-article num)
-           (with-current-buffer gnus-article-buffer
-             (push (debsum--strip-base64-attachments
-		    (buffer-substring-no-properties (point-min) (point-max)))
-                   bodies))))
-       (nreverse bodies)))
-   "\n"))
+  (when (or (derived-mode-p 'gnus-summary-mode)
+	    (derived-mode-p 'gnus-article-mode))
+    (gnus-summary-refer-thread)
+    (when-let ((thread (gnus-id-to-thread (gnus-root-id message-id)))
+	       (article-nums (gnus-articles-in-thread thread)))
+      (save-excursion
+	(save-window-excursion
+	  (let (bodies)
+	    (dolist (num article-nums)
+	      (gnus-summary-select-article nil nil nil num)
+	      (with-current-buffer gnus-article-buffer
+		(push (debsum--strip-base64-attachments
+		       (buffer-substring-no-properties
+			(point-min) (point-max)))
+		      bodies)))
+	    (setq bodies (nreverse bodies))
+	    (let* ((indexed-lengths (cl-loop for body in bodies
+					     for idx from 0
+					     collect (cons idx (length body))))
+		   (sorted-by-length (sort (copy-sequence indexed-lengths)
+					   (lambda (a b) (> (cdr a) (cdr b)))))
+		   (total-length (cl-reduce #'+ indexed-lengths :key #'cdr))
+		   (max-length 100000)
+		   (indices-to-drop nil))
+	      (while (and sorted-by-length (> total-length max-length))
+		(let ((largest (pop sorted-by-length)))
+		  (push (car largest) indices-to-drop)
+		  (cl-decf total-length (cdr largest))))
+	      (mapconcat #'identity
+			 (cl-loop for body in bodies
+				  for idx from 0
+				  unless (memq idx indices-to-drop)
+				  collect body)
+			 "\n"))))))))
 
 (defun debsum--bug-full-text (log)
   (let (lines)
@@ -228,7 +242,8 @@
     (let ((inhibit-read-only t))
       (fill-region (point-min) (point-max))
       (goto-char (point-min))
-      (insert header)
+      (when header
+	(insert header))
       (insert "\n")
       (debsum--make-citations-clickable)
       (goto-char (point-max))
@@ -241,6 +256,7 @@
   (when-let ((buf (debsum--bug bug-num)))
     (debsum--display-article bug-num buf)))
 
+;;;###autoload
 (defun debsum-thread ()
   (interactive)
   (if-let ((subj (gnus-summary-article-subject))
@@ -279,10 +295,10 @@
 	     (name (format "debbugs-summarize-%s" message-id))
 	     (bname (format "*%s*" name))
 	     (full-text (or (assoc-default message-id debsum--full-text-alist)
-			   (let ((ret (debsum--thread-full-text message-id)))
-			     (prog1 ret
-			       (push (cons message-id ret)
-				     debsum--full-text-alist)))))
+			    (let ((ret (debsum--thread-full-text message-id)))
+			      (prog1 ret
+				(push (cons (gnus-root-id message-id) ret)
+				      debsum--full-text-alist)))))
 	     (buf (debsum--reget-summary name bname full-text)))
     (debsum--add-buf message-id buf nil))
   (assoc-default message-id debsum--buffer-alist))
@@ -335,9 +351,10 @@
 		    (when (process-live-p proc)
 		      (kill-process proc)))))
 
-(defun debsum--display-article (bug-num buffer)
+(defun debsum--display-article (key buffer)
   "Display BUFFER using Gnus article display routines."
-  (if (not (derived-mode-p 'gnus-summary-mode))
+  (if (and (not (derived-mode-p 'gnus-summary-mode))
+	   (not (derived-mode-p 'gnus-article-mode)))
       (pop-to-buffer buffer)
     (let ((gnus-override-method '(nndebsum ""))
 	  (gnus-article-prepare-hook
@@ -346,23 +363,23 @@
 		     (let ((inhibit-read-only t))
 		       (erase-buffer)
 		       (insert-buffer-substring buffer)
-		       (debsum--chat-keyable bug-num)
+		       (debsum--chat-keyable key)
 		       (goto-char (point-min))))))))
       (gnus-article-prepare "foo" nil)
       (setq gnus-current-article nil))))
 
-(defun debsum-open-chat (bug-num)
+(defun debsum-open-chat (key)
   "Open comint buffer for LLM chat."
   (let* ((default-directory (debsum--elpa-dir))
-	 (full-text (or (assoc-default bug-num debsum--full-text-alist)
-		       (error "Missing full-text for Bug#%d" bug-num)))
+	 (full-text (or (assoc-default key debsum--full-text-alist)
+		       (error "Missing full-text for %s" key)))
 	 (temp-file (make-temp-file "debsum-full-text-"))
 	 ;; make-comint is idempotent
 	 (buf (progn
 		(let ((coding-system-for-write 'utf-8))
 		  (with-temp-file temp-file
 		    (insert full-text)))
-		(apply #'make-comint (format "debsum-chat-bug#%d" bug-num) "uv" nil
+		(apply #'make-comint (format "debsum-chat-%s" key) "uv" nil
 		       (split-string (format "run python chat.py %s" temp-file))))))
     (with-current-buffer buf
       (debsum-chat-mode))
@@ -376,9 +393,11 @@
   (setq-local comint-prompt-regexp "^Gemini> ")
   (setq-local comint-use-prompt-regexp t))
 
-(define-key gnus-summary-mode-map (kbd "z") #'debsum-thread)
-;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
-(define-key gnus-article-mode-map (kbd "z") #'debsum-thread)
+;;;###autoload
+(with-eval-after-load 'gnus-art
+  (define-key gnus-summary-mode-map (kbd "z") #'debsum-thread)
+  ;; gnus-article-read-summary-keys clobbers article, ergo explicit mapping
+  (define-key gnus-article-mode-map (kbd "z") #'debsum-thread))
 
 (provide 'debbugs-summarize)
 
