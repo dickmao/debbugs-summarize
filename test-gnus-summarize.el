@@ -110,5 +110,36 @@ Test body.
    (with-current-buffer gnus-summary-buffer
      (should (eq (key-binding (kbd "z")) #'gnus-summarize-thread)))
    (call-interactively #'gnus-group-exit)))
+
+(ert-deftest trim-text-fits ()
+  (let ((bodies '("short" "text" "here")))
+    (should (equal (gnus-summarize--trim-text bodies 100)
+		   bodies))))
+
+(ert-deftest trim-text-drops-largest ()
+  (let* ((small (make-string 100 ?a))
+	 (medium (make-string 200 ?b))
+	 (large (make-string 300 ?c))
+	 (bodies (list small medium large)))
+    (should (equal (gnus-summarize--trim-text bodies 350)
+		   (list small medium)))))
+
+(ert-deftest trim-text-preserves-order ()
+  (let* ((first (make-string 50 ?x))
+	 (second (make-string 300 ?y))
+	 (third (make-string 60 ?z))
+	 (bodies (list first second third)))
+    (should (equal (gnus-summarize--trim-text bodies 150)
+		   (list first third)))))
+
+(ert-deftest trim-text-drops-multiple ()
+  (let* ((a (make-string 100 ?a))
+	 (b (make-string 200 ?b))
+	 (c (make-string 300 ?c))
+	 (d (make-string 400 ?d))
+	 (bodies (list a b c d)))
+    (should (equal (gnus-summarize--trim-text bodies 350)
+		   (list a b)))))
+
 (provide 'test-gnus-summarize)
 ;;; test-project-gemini.el ends here

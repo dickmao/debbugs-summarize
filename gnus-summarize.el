@@ -120,6 +120,23 @@
 		     ""))
      "\n")))
 
+(defun gnus-summarize--trim-text (texts max-length)
+  (let* ((indexed-lengths (cl-loop for body in texts
+				   for idx from 0
+				   collect (cons idx (length body))))
+	 (sorted-by-length (sort (copy-sequence indexed-lengths)
+				 (lambda (a b) (> (cdr a) (cdr b)))))
+	 (total-length (cl-reduce #'+ indexed-lengths :key #'cdr))
+	 (indices-to-drop nil))
+    (while (and sorted-by-length (> total-length max-length))
+      (let ((largest (pop sorted-by-length)))
+	(push (car largest) indices-to-drop)
+	(cl-decf total-length (cdr largest))))
+    (cl-loop for body in texts
+	     for idx from 0
+	     unless (memq idx indices-to-drop)
+	     collect body)))
+
 (defun gnus-summarize--thread-full-text (root-id)
   (when (or (derived-mode-p 'gnus-summary-mode)
 	    (derived-mode-p 'gnus-article-mode))
@@ -127,33 +144,18 @@
 	       (article-nums (gnus-articles-in-thread thread)))
       (save-excursion
 	(save-window-excursion
-	  (let (bodies)
+	  (let (texts)
 	    (dolist (num article-nums)
 	      (gnus-summary-select-article nil nil nil num)
 	      (with-current-buffer gnus-article-buffer
 		(push (gnus-summarize--strip-base64-attachments
 		       (buffer-substring-no-properties
 			(point-min) (point-max)))
-		      bodies)))
-	    (setq bodies (nreverse bodies))
-	    (let* ((indexed-lengths (cl-loop for body in bodies
-					     for idx from 0
-					     collect (cons idx (length body))))
-		   (sorted-by-length (sort (copy-sequence indexed-lengths)
-					   (lambda (a b) (> (cdr a) (cdr b)))))
-		   (total-length (cl-reduce #'+ indexed-lengths :key #'cdr))
-		   (max-length 100000)
-		   (indices-to-drop nil))
-	      (while (and sorted-by-length (> total-length max-length))
-		(let ((largest (pop sorted-by-length)))
-		  (push (car largest) indices-to-drop)
-		  (cl-decf total-length (cdr largest))))
-	      (mapconcat #'identity
-			 (cl-loop for body in bodies
-				  for idx from 0
-				  unless (memq idx indices-to-drop)
-				  collect body)
-			 "\n"))))))))
+		      texts)))
+	    (setq texts (nreverse texts))
+	    (mapconcat #'identity
+		       (gnus-summarize--trim-text texts 100000)
+		       "\n")))))))
 
 (defun gnus-summarize--bug-full-text (log)
   (let (lines)
@@ -275,7 +277,9 @@
     (define-key map (kbd "C-c '")
 		(lambda ()
 		  (interactive)
-		  (gnus-summarize-open-chat bug-num)))
+		  (with-current-buffer (gnus-summarize-open-chat bug-num)
+		    (when (bound-and-true-p gnus-summarize--kill-timer)
+		      (cancel-timer gnus-summarize--kill-timer)))))
     (use-local-map map)))
 
 (defun gnus-summarize--extract-summary (b)
@@ -318,7 +322,9 @@
   (when-let (b (assoc-default key gnus-summarize--buffer-alist))
     (if (and (not (derived-mode-p 'gnus-summary-mode))
 	     (not (derived-mode-p 'gnus-article-mode)))
-	(pop-to-buffer b)
+	(with-current-buffer (pop-to-buffer b)
+	  (when (bound-and-true-p gnus-summarize--kill-timer)
+	    (cancel-timer gnus-summarize--kill-timer)))
       (let ((gnus-override-method '(nnsummarize ""))
 	    (gnus-article-prepare-hook
 	     (list (lambda ()
@@ -339,29 +345,40 @@
 
 (defun gnus-summarize-open-chat (key)
   "Open comint buffer for LLM chat."
-  (let* ((default-directory (gnus-summarize--elpa-dir))
-	 (full-text (or (assoc-default key gnus-summarize--full-text-alist)
-		       (error "Missing full-text for %s" key)))
-	 (temp-file (make-temp-file "gnus-summarize-full-text-"))
-	 ;; make-comint is idempotent
-	 (buf (progn
-		(let ((coding-system-for-write 'utf-8))
-		  (with-temp-file temp-file
-		    (insert full-text)))
-		(apply #'make-comint (format "gnus-summarize-chat-%s" key) "uv" nil
-		       (split-string (format "run python chat.py %s" temp-file))))))
-    (with-current-buffer buf
-      (gnus-summarize-chat-mode))
+  (let* ((bname (format "gnus-summarize-chat-%s" key))
+	 (b (get-buffer bname)))
+    (unless b
+      (let ((default-directory (gnus-summarize--elpa-dir))
+	    (coding-system-for-write 'utf-8)
+	    (temp-file (make-temp-file "gnus-summarize-full-text-"))
+	    (full-text (or (assoc-default key gnus-summarize--full-text-alist)
+			   (error "Missing full-text for %s" key))))
+	(with-temp-file temp-file
+	  (insert full-text))
+	(setq b (apply #'make-comint bname "uv" nil
+		       (split-string (format "run python chat.py %s"
+					     temp-file))))
+	(with-current-buffer b
+	  (set-process-query-on-exit-flag
+	   (get-buffer-process (current-buffer)) nil)
+	  (gnus-summarize-chat-mode))))
     (when (> (length (window-list)) 1)
       (delete-other-windows))
-    (pop-to-buffer buf '((display-buffer-at-bottom)
-			 (window-height . 0.5)))))
+    (pop-to-buffer b '((display-buffer-at-bottom)
+		       (window-height . 0.5)))))
 
 (define-derived-mode gnus-summarize-chat-mode comint-mode "Gnus-Summarize-Chat"
   "Comint mode for LLM chat."
+  (visual-line-mode)
   (setq-local comint-prompt-regexp "^Gemini> ")
   (setq-local comint-use-prompt-regexp t)
-  (setq-local gnus-summarize-chat-opened nil))
+  (let ((b (current-buffer)))
+    (setq-local gnus-summarize--kill-timer
+		(run-with-timer
+		 240 nil (lambda ()
+			   (when (buffer-live-p b)
+			     (let (kill-buffer-query-functions)
+			       (kill-buffer b))))))))
 
 ;;;###autoload
 (with-eval-after-load 'gnus-art
