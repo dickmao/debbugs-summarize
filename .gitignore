@@ -2,5 +2,5 @@
 /deps
 !/.claude
 *.tar
-debbugs-summarize-[0-9.]*
+gnus-summarize-[0-9.]*
 __pycache__/

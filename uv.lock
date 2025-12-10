@@ -101,7 +101,7 @@ wheels = [
 ]
 
 [[package]]
-name = "debbugs-summarize"
+name = "gnus-summarize"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

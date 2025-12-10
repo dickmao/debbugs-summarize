@@ -4,10 +4,10 @@ exclude = [
   "**/__pycache__",
 ]
 venvPath = "venvs"
-venv = "debbugs-summarize"
+venv = "gnus-summarize"
 
 [project]
-name = "debbugs-summarize"
+name = "gnus-summarize"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [

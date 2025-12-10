@@ -5,7 +5,7 @@ $(error uv not found)
 endif
 INSTALLDIR ?= package-user-dir
 PYSRC := $(shell git ls-files *.py)
-ELSRC := $(shell git ls-files debbugs-summarize*.el nn*.el)
+ELSRC := $(shell git ls-files gnus-summarize*.el nn*.el)
 TESTSRC := $(shell git ls-files test*.el)
 
 .PHONY: compile
@@ -29,9 +29,9 @@ uv.lock:
 install-py: .venv $(wildcard *.py)
 	uv pip install --quiet --force-reinstall --editable .
 
-deps/archives/gnu/archive-contents: debbugs-summarize.el
+deps/archives/gnu/archive-contents: gnus-summarize.el
 	$(call install-recipe,$(CURDIR)/deps)
-	rm -rf deps/debbugs-summarize* # just keep deps
+	rm -rf deps/gnus-summarize* # just keep deps
 
 .PHONY: test
 test: compile
@@ -44,17 +44,17 @@ test: compile
 dist-clean:
 	( \
 	set -e; \
-	PKG_NAME=`$(EMACS) -batch -L . -l debbugs-summarize-package --eval "(princ (debbugs-summarize-package-name))"`; \
+	PKG_NAME=`$(EMACS) -batch -L . -l gnus-summarize-package --eval "(princ (gnus-summarize-package-name))"`; \
 	rm -rf $${PKG_NAME}; \
 	rm -rf $${PKG_NAME}.tar; \
 	)
 
 .PHONY: dist
 dist: dist-clean
-	$(EMACS) -batch -L . -l debbugs-summarize-package -f debbugs-summarize-package-inception
+	$(EMACS) -batch -L . -l gnus-summarize-package -f gnus-summarize-package-inception
 	( \
 	set -e; \
-	PKG_NAME=`$(EMACS) -batch -L . -l debbugs-summarize-package --eval "(princ (debbugs-summarize-package-name))"`; \
+	PKG_NAME=`$(EMACS) -batch -L . -l gnus-summarize-package --eval "(princ (gnus-summarize-package-name))"`; \
 	rsync -R $(ELSRC) $(PYSRC) Makefile pyproject.toml summarize-prompt.txt chat-prompt.txt $${PKG_NAME} && \
 	tar cf $${PKG_NAME}.tar $${PKG_NAME}; \
 	)
@@ -65,13 +65,13 @@ define install-recipe
 	set -e; \
 	INSTALL_PATH=$(1); \
 	if [[ "$${INSTALL_PATH}" == /* ]]; then INSTALL_PATH=\"$${INSTALL_PATH}\"; fi; \
-	PKG_NAME=`$(EMACS) -batch -L . -l debbugs-summarize-package --eval "(princ (debbugs-summarize-package-name))"`; \
+	PKG_NAME=`$(EMACS) -batch -L . -l gnus-summarize-package --eval "(princ (gnus-summarize-package-name))"`; \
 	$(EMACS) --batch -l package --eval "(setq package-user-dir (expand-file-name $${INSTALL_PATH}))" \
 	  -f package-initialize \
-	  --eval "(ignore-errors (apply (function package-delete) (alist-get (quote debbugs-summarize) package-alist)))" \
+	  --eval "(ignore-errors (apply (function package-delete) (alist-get (quote gnus-summarize) package-alist)))" \
 	  -f package-refresh-contents \
 	  --eval "(package-install-file \"$${PKG_NAME}.tar\")"; \
-	PKG_DIR=`$(EMACS) -batch -l package --eval "(setq package-user-dir (expand-file-name $${INSTALL_PATH}))" -f package-initialize --eval "(princ (package-desc-dir (car (alist-get 'debbugs-summarize package-alist))))"`; \
+	PKG_DIR=`$(EMACS) -batch -l package --eval "(setq package-user-dir (expand-file-name $${INSTALL_PATH}))" -f package-initialize --eval "(princ (package-desc-dir (car (alist-get 'gnus-summarize package-alist))))"`; \
 	GIT_DIR=`git rev-parse --show-toplevel`/.git $(MAKE) -C $${PKG_DIR} uv.lock; \
 	)
 	$(MAKE) dist-clean
@@ -81,8 +81,8 @@ endef
 install:
 	$(call install-recipe,$(INSTALLDIR))
 
-README.rst: README.in.rst debbugs-summarize.el
-	grep ';;' debbugs-summarize.el \
+README.rst: README.in.rst gnus-summarize.el
+	grep ';;' gnus-summarize.el \
 	  | awk '/;;;\s*Commentary/{within=1;next}/;;;\s*/{within=0}within' \
 	  | sed -e 's/^\s*;;\s\?/   /g' \
 	  | bash readme-sed.sh "COMMENTARY" README.in.rst > README.rst

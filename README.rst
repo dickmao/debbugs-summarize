@@ -26,21 +26,18 @@ Add a line like
 to your ~/.authinfo.  Then,
 ::
 
-   git clone https://github.com/dickmao/debbugs-summarize.git
-   make -C debbugs-summarize install
+   git clone https://github.com/dickmao/gnus-summarize.git
+   make -C gnus-summarize install
 
 Usage
 =====
 ::
 
-   M-x debbugs-summarize-bug
-   
-   Or from gnus summary buffer of gmane.emacs.bugs,
-   M-x debbugs-summarize-from-summary
+   Hit "z" in a summary or article buffer, and wait.
 
 .. |build-status|
-   image:: https://github.com/dickmao/debbugs-summarize/workflows/CI/badge.svg?branch=dev
-   :target: https://github.com/dickmao/debbugs-summarize/actions
+   image:: https://github.com/dickmao/gnus-summarize/workflows/CI/badge.svg?branch=dev
+   :target: https://github.com/dickmao/gnus-summarize/actions
    :alt: Build Status
 
 .. |---| unicode:: U+02014 .. em dash

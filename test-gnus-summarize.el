@@ -18,7 +18,7 @@
 ;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
 (require 'ert)
-(require 'debbugs-summarize)
+(require 'gnus-summarize)
 
 (defconst gnus-tests-load-file-name (or load-file-name
                                         (buffer-file-name)))
@@ -108,7 +108,7 @@ Test body.
    (call-interactively #'gnus-group-read-group)
    (should (buffer-live-p gnus-summary-buffer))
    (with-current-buffer gnus-summary-buffer
-     (should (eq (key-binding (kbd "z")) #'debbugs-summarize-thread)))
+     (should (eq (key-binding (kbd "z")) #'gnus-summarize-thread)))
    (call-interactively #'gnus-group-exit)))
-(provide 'test-debbugs-summarize)
+(provide 'test-gnus-summarize)
 ;;; test-project-gemini.el ends here
