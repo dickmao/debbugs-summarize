@@ -2,16 +2,16 @@
 import sys
 import os
 from pathlib import Path
-from google import generativeai as genai
+from google import genai
 
 api_key = os.getenv('GEMINI_API_KEY')
 if not api_key:
     print("ERROR: GEMINI_API_KEY not set", file=sys.stderr)
     sys.exit(1)
 
-genai.configure(api_key=api_key)
+client = genai.Client(api_key=api_key)
 model_name = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')
-model = genai.GenerativeModel(model_name)
+model = client.chats.create(model=model_name)
 chat = model.start_chat(history=[])
 
 if len(sys.argv) > 1:
