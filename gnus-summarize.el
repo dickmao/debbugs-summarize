@@ -281,7 +281,8 @@
 		  (interactive)
 		  (with-current-buffer (gnus-summarize-open-chat bug-num)
 		    (when (bound-and-true-p gnus-summarize--kill-timer)
-		      (cancel-timer gnus-summarize--kill-timer)))))
+		      (setq-local gnus-summarize--kill-timer
+				  (cancel-timer gnus-summarize--kill-timer))))))
     (use-local-map map)))
 
 (defun gnus-summarize--extract-summary (b)
@@ -341,7 +342,10 @@
 			 (goto-char (point-max))
 			 (insert "\n\n---\nPress C-c ' to ask follow-up questions.\n")
 			 (goto-char (point-min))
-			 (gnus-summarize--chat-keyable key)))))))
+			 (gnus-summarize--chat-keyable key)
+			 (when (local-variable-p 'gnus-summary-buffer)
+			   (with-current-buffer gnus-summary-buffer
+			     (gnus-summarize--chat-keyable key)))))))))
 	(gnus-article-prepare "foo" nil)
 	;; so subsequent gnus-summary-select-article doesn't return 'old
 	(setq gnus-current-article nil)))))
