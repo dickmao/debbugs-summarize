@@ -348,7 +348,8 @@
 
 (defun gnus-summarize-open-chat (key)
   "Open comint buffer for LLM chat."
-  (let* ((bname (format "gnus-summarize-chat-%s" key))
+  (let* ((name (format "gnus-summarize-chat-%s" key))
+	 (bname (format "*%s*" name))
 	 (b (get-buffer bname)))
     (unless b
       (let ((default-directory (gnus-summarize--elpa-dir))
@@ -358,7 +359,7 @@
 			   (error "Missing full-text for %s" key))))
 	(with-temp-file temp-file
 	  (insert full-text))
-	(setq b (apply #'make-comint bname "uv" nil
+	(setq b (apply #'make-comint name "uv" nil
 		       (split-string (format "run python chat.py %s"
 					     temp-file))))
 	(with-current-buffer b
