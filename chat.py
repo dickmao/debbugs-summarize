@@ -11,8 +11,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 model_name = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash-lite')
-model = client.chats.create(model=model_name)
-chat = model.start_chat(history=[])
+chat = client.chats.create(model=model_name)
 
 if len(sys.argv) > 1:
     script_dir = Path(__file__).parent
