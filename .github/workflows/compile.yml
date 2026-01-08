@@ -2,7 +2,7 @@ name: Compilation
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 jobs:
   compile:

@@ -1,3 +1,4 @@
+export VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
 SHELL := /bin/bash
 EMACS ?= emacs
 ifeq ($(shell command -v uv 2>/dev/null),)
@@ -86,3 +87,10 @@ README.rst: README.in.rst gnus-summarize.el
 	  | awk '/;;;\s*Commentary/{within=1;next}/;;;\s*/{within=0}within' \
 	  | sed -e 's/^\s*;;\s\?/   /g' \
 	  | bash readme-sed.sh "COMMENTARY" README.in.rst > README.rst
+
+.PHONY: retag
+retag:
+	2>/dev/null git tag -d $(VERSION) || true
+	2>/dev/null git push --delete origin $(VERSION) || true
+	git tag $(VERSION)
+	git push origin $(VERSION)
