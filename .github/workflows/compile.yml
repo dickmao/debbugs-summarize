@@ -6,4 +6,4 @@ on:
 
 jobs:
   compile:
-    uses: commercial-emacs/dignified-elpa/.github/workflows/compile.yml@v1
+    uses: commercial-emacs/dignified-elpa/.github/workflows/compile.yml@master
