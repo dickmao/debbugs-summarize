@@ -1,9 +1,0 @@
-name: Compilation
-on:
-  push:
-    tags:
-      - '*'
-
-jobs:
-  compile:
-    uses: commercial-emacs/dignified-elpa/.github/workflows/compile.yml@master
